@@ -1,0 +1,3 @@
+---
+# defaults file for rei.dci_sanity_test
+home_path: "/var/lib/dci-openshift-agent"

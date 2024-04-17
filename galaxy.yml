@@ -1,0 +1,11 @@
+namespace: "reihl"
+name: "dci_sanity_test"
+version: "1.0.2"
+readme: "README.md"
+authors:
+    - "Rei Halle"
+dependencies: {}
+license:
+    - "MIT"
+tags: []
+repository: "https://www.github.com/reihl/dci_sanity_test"

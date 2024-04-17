@@ -1,0 +1,5 @@
+---
+- hosts: ocp_edge72
+  remote_user: root
+  roles:
+    - rei.dci_sanity_test

@@ -1,0 +1,69 @@
+---
+# tasks file for rei.dci_sanity_test
+- name: Clone ocp-edge-test repo
+  ansible.builtin.git:
+    repo: https://gitlab.cee.redhat.com/ocp-edge-qe/ocp-edge-auto.git
+    dest: "{{ home_path }}/project/ocp-edge-test/"
+
+- name: Create .docker directory
+  ansible.builtin.file:
+    path: "{{ home_path }}/.docker"
+    state: directory
+
+- name: Create pod_data  directory
+  ansible.builtin.file:
+    path: "{{ home_path }}/project/pod_data"
+    owner: 1002
+    group: 980
+    state: directory
+
+- name: Copy config.json secert into .docker directory
+  ansible.builtin.copy:
+    src: files/config.json
+    dest: "{{ home_path }}/.docker/config.json"
+    decrypt: true
+
+- name: Build the container
+  containers.podman.podman_image:
+    name: pytest_container
+    path: "{{ home_path }}/project/ocp-edge-test/"
+
+- name: Copy files from provisionhost
+  delegate_to: provisionhost
+  run_once: true
+  ansible.builtin.fetch:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    flat: true
+  loop:
+    - { src: /home/dci/clusterconfigs/install-config.yaml.bkup, dest: "{{ home_path }}/files/install-config.yaml" }
+    - { src: /home/dci/.ssh/id_rsa, dest: "{{ home_path }}/files/id_rsa" }
+    - { src: /home/dci/clusterconfigs/pull-secret.txt, dest: "{{ home_path }}/files/combined-secret.json" }
+    - { src: /home/dci/clusterconfigs/auth/kubeconfig , dest: "{{  home_path }}/files/.kube/config"  } 
+
+    
+- name: Run PyTest container
+  register: pytest_pod_details
+  vars:
+    random_job_id: "{{ lookup('community.general.random_string', length=12) }}"
+  containers.podman.podman_container:
+    name: ocp_edge_test_pytest
+    image: localhost/pytest_container
+    user: 1002
+    network: host
+    #rm: true
+    volumes:
+      - "{{ home_path }}/files/install-config.yaml:/opt/app-root/src/install-config.yaml:Z"
+      - "{{ home_path }}/files/id_rsa:/opt/app-root/src/.ssh/id_rsa:Z"
+      - "{{ home_path }}/project/ocp-edge-test/:/ocp-edge-auto:Z"
+      - "{{ home_path }}/files/.kube/config:/opt/app-root/src/.kube/config:Z"
+      - "{{ home_path }}/files/combined-secret.json:/opt/app-root/src/combined-secret.json:Z"
+      - "{{ home_path }}/project/pod_data/:/opt/app-root/src/:Z"
+    command: "pytest edge_tests/deployment/installer/test_basic_sanity.py --junit-xml /opt/app-root/src/{{ job_id | default(random_job_id) }}_results.xml"
+
+- name: Wait for process {{ pytest_pod_details.container.State.Pid }} to end
+  ansible.builtin.wait_for:
+    path: "/proc/{{ pytest_pod_details.container.State.Pid }}/status"
+    state: absent
+    timeout: 900
+...
